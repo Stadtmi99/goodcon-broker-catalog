@@ -1,0 +1,43 @@
+name: Refresh broker catalog
+
+# Regenerates brokers.json from public sources weekly (and on demand).
+# Public data only — no secrets, no PII.
+
+on:
+  schedule:
+    - cron: "0 7 * * 1"   # Mondays 07:00 UTC
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install deps
+        run: pip install -r requirements.txt
+
+      - name: Clone justvanish (source)
+        run: git clone --depth 1 https://github.com/AnalogJ/justvanish.git /tmp/justvanish
+
+      - name: Generate catalog
+        run: python3 generate.py --justvanish /tmp/justvanish --out brokers.json
+
+      - name: Commit if changed
+        run: |
+          if git diff --quiet -- brokers.json; then
+            echo "No catalog changes."
+          else
+            git config user.name  "catalog-bot"
+            git config user.email "catalog-bot@users.noreply.github.com"
+            git add brokers.json
+            git commit -m "chore: refresh broker catalog $(date -u +%Y-%m-%d)"
+            git push
+          fi
